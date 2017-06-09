@@ -9,7 +9,6 @@ using Object = UnityEngine.Object;
 using System.Reflection;
 public class CodeGenWindow : EditorWindow
 {
-
     [MenuItem("Window/CodeGen")]
     private static void Open()
     {
@@ -18,8 +17,8 @@ public class CodeGenWindow : EditorWindow
     static CodeGenWindow window;
     private SerializedProperty script;
     private SerializedObject serializedObj;
-    private List<Graphic> graphics;
-    private List<Selectable> selectables;
+    private List<Graphic> graphics = new List<Graphic>();
+    private List<Selectable> selectables = new List<Selectable>();
     private GameObject parent;
     private GameObject target;
     private List<MonoBehaviour> scripts;
@@ -60,28 +59,23 @@ public class CodeGenWindow : EditorWindow
     private string inptFormat = "\t[SerializeField] private InputField m_{0}; \n";
     private string slidFormat = "\t[SerializeField] private Slider m_{0}; \n";
 
-    private string onClickFormat = "\t\tm_{0}.onClick.AddListener(On{0}Clicked); \n";
-    private string onValueChangeFormat = "\t\tm_{0}.onValueChanged.AddListener(On{0}ValueChanged); \n";
+    private string onClickFormat = "\t\tm_{0}.onClick.AddListener(On{1}Clicked); \n";
+    private string onValueChangeFormat = "\t\tm_{0}.onValueChanged.AddListener(On{1}ValueChanged); \n";
 
     private string btnFuncFormat = "\tprivate void On{0}Clicked()\n\t{\n\t}\n";
     private string togFuncFormat = "\tprivate void On{0}ValueChanged(bool arg)\n\t{\n\t}\n";
-    private string inputFuncFormat = "\tprivate void On{0}ValueChanged(string arg)\n\t{\n\t\t{0} = arg;\n\t}\n";
-    private string sliderFuncFormat = "\tprivate void On{0}ValueChanged(float arg)\n\t{\n\t\t{0} = arg;\n\t}\n";
+    private string inputFuncFormat = "\tprivate void On{0}ValueChanged(string arg)\n\t{\n\t\t\n\t}\n";
+    private string sliderFuncFormat = "\tprivate void On{0}ValueChanged(float arg)\n\t{\n\t\t\n\t}\n";
 
-    private string inputDataFormat = "\tprivate string {0} = \"\";\n";
-    private string sliderDataFormat = "\tprivate float {0} = 0;\n";
-
-    private float questionName = 0;
     private Vector2 scrollPos;
     private void OnEnable()
     {
         serializedObj = new SerializedObject(this);
         script = serializedObj.FindProperty("m_Script");
-        graphics = new List<Graphic>();
-        selectables = new List<Selectable>();
     }
     void OnGUI()
     {
+        serializedObj.Update();
         if (window == null) window = GetWindow<CodeGenWindow>();
         EditorGUILayout.PropertyField(script);
         using (var h = new EditorGUILayout.HorizontalScope())
@@ -103,6 +97,7 @@ public class CodeGenWindow : EditorWindow
                 DrawToolButtons();
             }
         }
+        serializedObj.ApplyModifiedProperties();
     }
 
     private void DrawAutoImport()
@@ -245,9 +240,7 @@ public class CodeGenWindow : EditorWindow
                 EditorGUILayout.LabelField(new GUIContent("[Button格式]:" + btnFormat));
                 EditorGUILayout.LabelField(new GUIContent("[Toggle格式]:" + btnFormat));
                 EditorGUILayout.LabelField(new GUIContent("[Slider格式]:" + btnFormat));
-                EditorGUILayout.LabelField(new GUIContent("[Slider值记录]" + sliderDataFormat));
                 EditorGUILayout.LabelField(new GUIContent("[InputField格式]:" + btnFormat));
-                EditorGUILayout.LabelField(new GUIContent("[InputField值记录]:" + sliderDataFormat));
 
                 EditorGUILayout.LabelField(new GUIContent("[OnClick格式]:" + onClickFormat));
                 EditorGUILayout.LabelField(new GUIContent("[OnValueChange格式]:" + onValueChangeFormat));
@@ -288,6 +281,7 @@ public class CodeGenWindow : EditorWindow
                         System.IO.File.WriteAllText(System.IO.Path.GetFullPath(path), newCode, System.Text.Encoding.UTF8);
                     }
                 }
+                AssetDatabase.Refresh();
             }
             if (GUILayout.Button("连接到ui", GUILayout.Height(height)))
             {
@@ -308,12 +302,14 @@ public class CodeGenWindow : EditorWindow
                         TraverseGraphic((grap) =>
                         {
                             type.InvokeMember("m_" + grap.name,
-                                BindingFlags.SetField |
-                                BindingFlags.Instance |
-                                BindingFlags.NonPublic,
-                                null, Selected[i], new object[] { grap }, null, null, null);
+                               BindingFlags.SetField |
+                               BindingFlags.Instance |
+                               BindingFlags.NonPublic,
+                               null, Selected[i], new object[] { grap }, null, null, null);
                         });
                     }
+
+                   
                 }
 
             }
@@ -353,30 +349,28 @@ public class CodeGenWindow : EditorWindow
             else if (sele is Slider)
             {
                 str += string.Format(slidFormat, sele.name);
-                str += string.Format(sliderDataFormat, sele.name);
             }
             else if (sele is InputField)
             {
                 str += string.Format(inptFormat, sele.name);
-                str += string.Format(inputDataFormat, sele.name);
             }
         });
         #endregion
 
         #region 记录事件注册
-        str += "\tprivate void Awake()\n\t{\n";
+            str += "\tprivate void Awake()\n\t{\n";
         TraverseSelectable((sele) =>
         {
             if (sele is Button)
             {
-                str += string.Format(onClickFormat, sele.name);
+                str += string.Format(onClickFormat, sele.name, sele.name[0].ToString().ToUpper() + sele.name.Substring(1));
             }
             else if (sele is Toggle || sele is Slider || sele is InputField)
             {
-                str += string.Format(onValueChangeFormat, sele.name);
+                str += string.Format(onValueChangeFormat, sele.name, sele.name[0].ToString().ToUpper() + sele.name.Substring(1));
             }
         });
-        str += "\t}\n";
+            str += "\t}\n";
         #endregion
 
         #region 记录方法
@@ -384,19 +378,19 @@ public class CodeGenWindow : EditorWindow
         {
             if (sele is Button)
             {
-                str += btnFuncFormat.Replace("{0}", sele.name);
+                str += btnFuncFormat.Replace("{0}", sele.name[0].ToString().ToUpper() + sele.name.Substring(1));
             }
             else if (sele is Toggle)
             {
-                str += togFuncFormat.Replace("{0}", sele.name);
+                str += togFuncFormat.Replace("{0}", sele.name[0].ToString().ToUpper() + sele.name.Substring(1));
             }
             else if (sele is Slider)
             {
-                str += sliderFuncFormat.Replace("{0}", sele.name);
+                str += sliderFuncFormat.Replace("{0}", sele.name[0].ToString().ToUpper() + sele.name.Substring(1));
             }
             else if (sele is InputField)
             {
-                str += inputFuncFormat.Replace("{0}", sele.name);
+                str += inputFuncFormat.Replace("{0}", sele.name[0].ToString().ToUpper() + sele.name.Substring(1));
             }
         });
         #endregion
